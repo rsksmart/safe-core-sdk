@@ -1,7 +1,7 @@
 import chai from 'chai'
 import chaiAsPromised from 'chai-as-promised'
-import { deployments, ethers, waffle } from 'hardhat'
-import EthersSafeFactory from '../src/EthersSafeFactory'
+import { deployments, waffle } from 'hardhat'
+import EthersSafeFactory, { SafeProxyFactoryConfiguration } from '../src/EthersSafeFactory'
 chai.use(chaiAsPromised)
 
 describe('Safe creation', () => {
@@ -64,13 +64,28 @@ describe('Safe creation', () => {
         chai.expect(safeSdk).not.to.be.undefined
       })
     })
-    describe('with safe singleton configuration', () => {
+    describe('with safe proxy configuration', () => {
       it('should successfully create a safeSDK instance if the threshold is not set', async () => {
         const { safeSingletonAddress } = await setupTests()
         const safeSdk = await EthersSafeFactory.createSafe(
           { safeSingletonAddress },
           { signer: user1, owners }
         )
+        chai.expect(safeSdk).not.to.be.undefined
+      })
+      it('should successfully create a safeSDK instance with nonce', async () => {
+        const { safeSingletonAddress } = await setupTests()
+        const safeSdk = await EthersSafeFactory.createSafe(
+          { safeSingletonAddress, nonce: 1234 },
+          { signer: user1, owners }
+        )
+        chai.expect(safeSdk).not.to.be.undefined
+      })
+
+      it('should successfully create a safeSDK instance with callback and nonce', async () => {
+        const { safeSingletonAddress } = await setupTests()
+        const conf: SafeProxyFactoryConfiguration = { safeSingletonAddress, callbackAddress: '0x' }
+        const safeSdk = await EthersSafeFactory.createSafe(conf, { signer: user1, owners })
         chai.expect(safeSdk).not.to.be.undefined
       })
     })

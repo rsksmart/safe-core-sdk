@@ -5,26 +5,48 @@ import Safe from 'Safe'
 import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
 import EthersSafe from './EthersSafe'
 
-interface SafeProxyFactoryConfig {
+interface SafeProxyFactoryConfigurationSimple {
   safeSingletonAddress: string
   data?: string
-  nonce?: number
+}
+
+interface SafeProxyFactoryConfigurationExtended extends SafeProxyFactoryConfigurationSimple {
+  nonce: number
   callbackAddress?: string
 }
 
-interface SafeConfiguration {
+export type SafeProxyFactoryConfiguration =
+  | string
+  | SafeProxyFactoryConfigurationSimple
+  | SafeProxyFactoryConfigurationExtended
+
+interface SafeAccountConfiguration {
   signer: Signer
   owners: string[]
   threshold?: number
+  to?: string
+  data?: string
+  fallbackHandler?: string
+  paymentToken?: string
+  payment?: number
+  paymentReceiver?: string
 }
 
 class EthersSafeFactory {
   static async createSafe(
-    safeProxyConfiguration: SafeProxyFactoryConfig | string,
-    safeConfiguration: SafeConfiguration
+    safeProxyConfiguration: SafeProxyFactoryConfiguration,
+    safeAccountConfiguration: SafeAccountConfiguration
   ): Promise<Safe> {
-    const { signer, owners } = safeConfiguration
-    const { threshold = owners.length } = safeConfiguration
+    const { signer, owners } = safeAccountConfiguration
+    const {
+      threshold = owners.length,
+      to = ZERO_ADDRESS,
+      data = EMPTY_DATA,
+      fallbackHandler = ZERO_ADDRESS,
+      paymentToken = ZERO_ADDRESS,
+      payment = 0,
+      paymentReceiver = ZERO_ADDRESS
+    } = safeAccountConfiguration
     if (threshold <= 0) {
       throw new Error('Invalid threshold: it must be greater than or equal to 0')
     }
@@ -44,18 +66,18 @@ class EthersSafeFactory {
     await gnosisSafe.setup(
       owners,
       threshold,
-      ZERO_ADDRESS,
-      EMPTY_DATA,
-      ZERO_ADDRESS,
-      ZERO_ADDRESS,
-      0,
-      ZERO_ADDRESS
+      to,
+      data,
+      fallbackHandler,
+      paymentToken,
+      payment,
+      paymentReceiver
     )
     return await EthersSafe.create(ethers, gnosisSafe.address, signer)
   }
 
   private static async createProxyTransactionFromConfiguration(
-    proxyConfiguration: SafeProxyFactoryConfig,
+    proxyConfiguration: SafeProxyFactoryConfiguration,
     signer: Signer
   ) {
     const proxyFactoryFactory = new ContractFactory(
@@ -64,8 +86,13 @@ class EthersSafeFactory {
       signer
     )
     const proxyFactory = await proxyFactoryFactory.deploy()
-    const { safeSingletonAddress, data = EMPTY_DATA, nonce, callbackAddress } = proxyConfiguration
-    if (callbackAddress) {
+    const {
+      safeSingletonAddress,
+      data = EMPTY_DATA,
+      nonce,
+      callbackAddress
+    } = proxyConfiguration as SafeProxyFactoryConfigurationExtended
+    if (callbackAddress && nonce) {
       return await proxyFactory.createProxyWithCallback(
         safeSingletonAddress,
         data,
@@ -80,7 +107,7 @@ class EthersSafeFactory {
   }
 
   private static async createProxyTransaction(
-    safeProxyConfiguration: string | SafeProxyFactoryConfig,
+    safeProxyConfiguration: string | SafeProxyFactoryConfiguration,
     signer: Signer
   ) {
     if (typeof safeProxyConfiguration === 'string') {
