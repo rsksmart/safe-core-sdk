@@ -1,4 +1,4 @@
-import { Contract, ContractFactory, Signer, Event, ethers, Transaction } from 'ethers'
+import { Contract, Signer, Event, ethers } from 'ethers'
 import GnosisSafeProxyFactory from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafeProxyFactory.json'
 import GnosisSafe from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafe.json'
 import Safe from 'Safe'
@@ -6,6 +6,7 @@ import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
 import EthersSafe from './EthersSafe'
 
 interface SafeProxyFactoryConfigurationSimple {
+  proxyFactoryAddress: string
   safeSingletonAddress: string
   data?: string
 }
@@ -16,12 +17,10 @@ interface SafeProxyFactoryConfigurationExtended extends SafeProxyFactoryConfigur
 }
 
 export type SafeProxyFactoryConfiguration =
-  | string
   | SafeProxyFactoryConfigurationSimple
   | SafeProxyFactoryConfigurationExtended
 
 interface SafeAccountConfiguration {
-  signer: Signer
   owners: string[]
   threshold?: number
   to?: string
@@ -33,11 +32,30 @@ interface SafeAccountConfiguration {
 }
 
 class EthersSafeFactory {
-  static async createSafe(
-    safeProxyConfiguration: SafeProxyFactoryConfiguration,
-    safeAccountConfiguration: SafeAccountConfiguration
-  ): Promise<Safe> {
-    const { signer, owners } = safeAccountConfiguration
+  #safeProxyConfiguration!: SafeProxyFactoryConfiguration
+  #signer!: Signer
+
+  constructor(signer: Signer, safeProxyConfiguration: SafeProxyFactoryConfiguration) {
+    this.#safeProxyConfiguration = safeProxyConfiguration
+    this.#signer = signer
+  }
+
+  async createSafe(safeAccountConfiguration: SafeAccountConfiguration): Promise<Safe> {
+    const { proxyFactoryAddress, safeSingletonAddress } = this.#safeProxyConfiguration
+    if (!this.#signer.provider) {
+      throw new Error('Signer must be connected to a provider')
+    }
+    const proxyFactoryContractCode = await this.#signer.provider.getCode(proxyFactoryAddress)
+    if (proxyFactoryContractCode === EMPTY_DATA) {
+      throw new Error('ProxyFactory contract is not deployed in the current network')
+    }
+
+    const safeSingletonContractCode = await this.#signer.provider.getCode(safeSingletonAddress)
+    if (safeSingletonContractCode === EMPTY_DATA) {
+      throw new Error('SafeSingleton contract is not deployed in the current network')
+    }
+
+    const { owners } = safeAccountConfiguration
     const {
       threshold = owners.length,
       to = ZERO_ADDRESS,
@@ -54,15 +72,12 @@ class EthersSafeFactory {
       throw new Error('Invalid threshold: it must be lower than or equal to owners length')
     }
 
-    let createProxyTx = await EthersSafeFactory.createProxyTransaction(
-      safeProxyConfiguration,
-      signer
-    )
+    let createProxyTx = await this.createProxyTransaction()
 
     const receipt = await createProxyTx.wait()
     const proxyAddress = receipt.events.find((e: Event) => e.event === 'ProxyCreation').args[0]
 
-    const gnosisSafe = new Contract(proxyAddress, GnosisSafe.abi, signer)
+    const gnosisSafe = new Contract(proxyAddress, GnosisSafe.abi, this.#signer)
     await gnosisSafe.setup(
       owners,
       threshold,
@@ -73,25 +88,18 @@ class EthersSafeFactory {
       payment,
       paymentReceiver
     )
-    return await EthersSafe.create(ethers, gnosisSafe.address, signer)
+    return await EthersSafe.create(ethers, gnosisSafe.address, this.#signer)
   }
 
-  private static async createProxyTransactionFromConfiguration(
-    proxyConfiguration: SafeProxyFactoryConfiguration,
-    signer: Signer
-  ) {
-    const proxyFactoryFactory = new ContractFactory(
-      GnosisSafeProxyFactory.abi,
-      GnosisSafeProxyFactory.bytecode,
-      signer
-    )
-    const proxyFactory = await proxyFactoryFactory.deploy()
+  private async createProxyTransaction() {
     const {
+      proxyFactoryAddress,
       safeSingletonAddress,
       data = EMPTY_DATA,
       nonce,
       callbackAddress
-    } = proxyConfiguration as SafeProxyFactoryConfigurationExtended
+    } = this.#safeProxyConfiguration as SafeProxyFactoryConfigurationExtended
+    const proxyFactory = new Contract(proxyFactoryAddress, GnosisSafeProxyFactory.abi, this.#signer)
     if (callbackAddress && nonce) {
       return await proxyFactory.createProxyWithCallback(
         safeSingletonAddress,
@@ -103,23 +111,6 @@ class EthersSafeFactory {
       return await proxyFactory.createProxyWithNonce(safeSingletonAddress, data, nonce)
     } else {
       return await proxyFactory.createProxy(safeSingletonAddress, data)
-    }
-  }
-
-  private static async createProxyTransaction(
-    safeProxyConfiguration: string | SafeProxyFactoryConfiguration,
-    signer: Signer
-  ) {
-    if (typeof safeProxyConfiguration === 'string') {
-      return await EthersSafeFactory.createProxyTransactionFromConfiguration(
-        { safeSingletonAddress: safeProxyConfiguration },
-        signer
-      )
-    } else {
-      return await EthersSafeFactory.createProxyTransactionFromConfiguration(
-        safeProxyConfiguration,
-        signer
-      )
     }
   }
 }
