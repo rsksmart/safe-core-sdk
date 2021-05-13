@@ -2,7 +2,7 @@ import chai from 'chai'
 import chaiAsPromised from 'chai-as-promised'
 import { Signer } from 'ethers'
 import { deployments, waffle } from 'hardhat'
-import EthersSafeFactory, { SafeProxyFactoryConfiguration } from '../src/EthersSafeFactory'
+import EthersSafeFactory from '../src/EthersSafeFactory'
 chai.use(chaiAsPromised)
 
 describe('Safe creation', () => {
@@ -18,8 +18,18 @@ describe('Safe creation', () => {
     }
   })
 
+  const verifyOwnersAndThreshold = async (safeSdk: any, owners: string[], threshold?: number) => {
+    if (!threshold) {
+      threshold = owners.length
+    }
+    const retrievedOwners: string[] = await safeSdk.getOwners()
+    const retrievedThreshold: number = await safeSdk.getThreshold()
+    chai.expect(retrievedOwners).to.deep.equal(owners)
+    chai.expect(retrievedThreshold).to.equal(threshold)
+  }
+
   describe('EthersSafeFactory.create', () => {
-    const owners = [user1.address, user2.address, user3.address]
+    const owners: string[] = [user1.address, user2.address, user3.address]
     let safeSingletonAddress: string
     let proxyFactoryAddress: string
 
@@ -30,10 +40,11 @@ describe('Safe creation', () => {
     it('should fail if the signer is not connected to a provider', async () => {
       // Used to mock a signer without provider
       const mockedSigner = {}
-      const ethersSafeFactory = new EthersSafeFactory(mockedSigner as Signer, {
-        safeSingletonAddress,
-        proxyFactoryAddress
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        mockedSigner as Signer,
+        proxyFactoryAddress,
+        safeSingletonAddress
+      )
       await chai
         .expect(
           ethersSafeFactory.createSafe({
@@ -45,10 +56,11 @@ describe('Safe creation', () => {
     })
 
     it('should fail if the proxyFactoryAddress is not valid', async () => {
-      const ethersSafeFactory = new EthersSafeFactory(user1, {
-        safeSingletonAddress,
-        proxyFactoryAddress: '0x0DA0C3e52C977Ed3cBc641fF02DD271c3ED55aFe'
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
+        '0x0DA0C3e52C977Ed3cBc641fF02DD271c3ED55aFe',
+        safeSingletonAddress
+      )
       await chai
         .expect(
           ethersSafeFactory.createSafe({
@@ -60,10 +72,11 @@ describe('Safe creation', () => {
     })
 
     it('should fail if the safeSingletonAddress is not valid', async () => {
-      const ethersSafeFactory = new EthersSafeFactory(user1, {
-        safeSingletonAddress: '0x0DA0C3e52C977Ed3cBc641fF02DD271c3ED55aFe',
-        proxyFactoryAddress
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
+        proxyFactoryAddress,
+        '0x0DA0C3e52C977Ed3cBc641fF02DD271c3ED55aFe'
+      )
       await chai
         .expect(
           ethersSafeFactory.createSafe({
@@ -75,10 +88,11 @@ describe('Safe creation', () => {
     })
 
     it('should fail if the threshold is less than or equal to zero', async () => {
-      const ethersSafeFactory = new EthersSafeFactory(user1, {
-        safeSingletonAddress,
-        proxyFactoryAddress
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
+        proxyFactoryAddress,
+        safeSingletonAddress
+      )
       await chai
         .expect(
           ethersSafeFactory.createSafe({
@@ -90,10 +104,11 @@ describe('Safe creation', () => {
     })
 
     it('should fail if the threshold is greater than the owners length', async () => {
-      const ethersSafeFactory = new EthersSafeFactory(user1, {
-        safeSingletonAddress,
-        proxyFactoryAddress
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
+        proxyFactoryAddress,
+        safeSingletonAddress
+      )
       await chai
         .expect(
           ethersSafeFactory.createSafe({
@@ -105,47 +120,53 @@ describe('Safe creation', () => {
     })
 
     it('should successfully create a safeSDK instance if the threshold is set properly', async () => {
-      const ethersSafeFactory = new EthersSafeFactory(user1, {
-        safeSingletonAddress,
-        proxyFactoryAddress
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
+        proxyFactoryAddress,
+        safeSingletonAddress
+      )
+      const expectedThreshold = 2
       const safeSdk = await ethersSafeFactory.createSafe({
         owners,
-        threshold: 2
+        threshold: expectedThreshold
       })
-      chai.expect(safeSdk).not.to.be.undefined
+      await verifyOwnersAndThreshold(safeSdk, owners, expectedThreshold)
     })
 
     it('should successfully create a safeSDK instance if the threshold is not set', async () => {
-      const ethersSafeFactory = new EthersSafeFactory(user1, {
-        safeSingletonAddress,
-        proxyFactoryAddress
-      })
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
+        proxyFactoryAddress,
+        safeSingletonAddress
+      )
       const safeSdk = await ethersSafeFactory.createSafe({ owners })
-      chai.expect(safeSdk).not.to.be.undefined
+      await verifyOwnersAndThreshold(safeSdk, owners)
     })
     it('should successfully create a safeSDK instance with nonce', async () => {
-      const conf: SafeProxyFactoryConfiguration = {
-        safeSingletonAddress,
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
         proxyFactoryAddress,
-        nonce: 123456
-      }
-      const ethersSafeFactory = new EthersSafeFactory(user1, conf)
-      const safeSdk = await ethersSafeFactory.createSafe({ owners })
-      chai.expect(safeSdk).not.to.be.undefined
+        safeSingletonAddress
+      )
+      const safeSdk = await ethersSafeFactory.createSafe({ owners }, { nonce: 123456 })
+      await verifyOwnersAndThreshold(safeSdk, owners)
     })
 
     it('should successfully create a safeSDK instance with callback and nonce', async () => {
       const proxyCreationCallback = await deployments.get('MockProxyCreationCallback')
-      const conf: SafeProxyFactoryConfiguration = {
-        safeSingletonAddress,
+      const ethersSafeFactory = new EthersSafeFactory(
+        user1,
         proxyFactoryAddress,
-        nonce: 123456,
-        callbackAddress: proxyCreationCallback.address
-      }
-      const ethersSafeFactory = new EthersSafeFactory(user1, conf)
-      const safeSdk = await ethersSafeFactory.createSafe({ owners })
-      chai.expect(safeSdk).not.to.be.undefined
+        safeSingletonAddress
+      )
+      const safeSdk = await ethersSafeFactory.createSafe(
+        { owners },
+        {
+          nonce: 123456,
+          callbackAddress: proxyCreationCallback.address
+        }
+      )
+      await verifyOwnersAndThreshold(safeSdk, owners)
     })
   })
 })

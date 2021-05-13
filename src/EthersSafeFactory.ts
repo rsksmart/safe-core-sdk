@@ -5,20 +5,11 @@ import Safe from 'Safe'
 import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
 import EthersSafe from './EthersSafe'
 
-interface SafeProxyFactoryConfigurationSimple {
-  proxyFactoryAddress: string
-  safeSingletonAddress: string
+export interface DeploymentOptions {
+  nonce?: number
   data?: string
-}
-
-interface SafeProxyFactoryConfigurationExtended extends SafeProxyFactoryConfigurationSimple {
-  nonce: number
   callbackAddress?: string
 }
-
-export type SafeProxyFactoryConfiguration =
-  | SafeProxyFactoryConfigurationSimple
-  | SafeProxyFactoryConfigurationExtended
 
 interface SafeAccountConfiguration {
   owners: string[]
@@ -32,25 +23,31 @@ interface SafeAccountConfiguration {
 }
 
 class EthersSafeFactory {
-  #safeProxyConfiguration!: SafeProxyFactoryConfiguration
   #signer!: Signer
+  #proxyFactoryAddress!: string
+  #safeSingletonAddress!: string
 
-  constructor(signer: Signer, safeProxyConfiguration: SafeProxyFactoryConfiguration) {
-    this.#safeProxyConfiguration = safeProxyConfiguration
+  constructor(signer: Signer, proxyFactoryAddress: string, safeSingletonAddress: string) {
     this.#signer = signer
+    this.#proxyFactoryAddress = proxyFactoryAddress
+    this.#safeSingletonAddress = safeSingletonAddress
   }
 
-  async createSafe(safeAccountConfiguration: SafeAccountConfiguration): Promise<Safe> {
-    const { proxyFactoryAddress, safeSingletonAddress } = this.#safeProxyConfiguration
+  async createSafe(
+    safeAccountConfiguration: SafeAccountConfiguration,
+    deploymentOptions?: DeploymentOptions
+  ): Promise<Safe> {
     if (!this.#signer.provider) {
       throw new Error('Signer must be connected to a provider')
     }
-    const proxyFactoryContractCode = await this.#signer.provider.getCode(proxyFactoryAddress)
+    const proxyFactoryContractCode = await this.#signer.provider.getCode(this.#proxyFactoryAddress)
     if (proxyFactoryContractCode === EMPTY_DATA) {
       throw new Error('ProxyFactory contract is not deployed in the current network')
     }
 
-    const safeSingletonContractCode = await this.#signer.provider.getCode(safeSingletonAddress)
+    const safeSingletonContractCode = await this.#signer.provider.getCode(
+      this.#safeSingletonAddress
+    )
     if (safeSingletonContractCode === EMPTY_DATA) {
       throw new Error('SafeSingleton contract is not deployed in the current network')
     }
@@ -72,7 +69,7 @@ class EthersSafeFactory {
       throw new Error('Invalid threshold: it must be lower than or equal to owners length')
     }
 
-    let createProxyTx = await this.createProxyTransaction()
+    let createProxyTx = await this.createProxyTransaction(deploymentOptions)
 
     const receipt = await createProxyTx.wait()
     const proxyAddress = receipt.events.find((e: Event) => e.event === 'ProxyCreation').args[0]
@@ -91,26 +88,24 @@ class EthersSafeFactory {
     return await EthersSafe.create(ethers, gnosisSafe.address, this.#signer)
   }
 
-  private async createProxyTransaction() {
-    const {
-      proxyFactoryAddress,
-      safeSingletonAddress,
-      data = EMPTY_DATA,
-      nonce,
-      callbackAddress
-    } = this.#safeProxyConfiguration as SafeProxyFactoryConfigurationExtended
-    const proxyFactory = new Contract(proxyFactoryAddress, GnosisSafeProxyFactory.abi, this.#signer)
+  private async createProxyTransaction(deploymentOptions: DeploymentOptions = {}) {
+    const { data = EMPTY_DATA, nonce, callbackAddress } = deploymentOptions
+    const proxyFactory = new Contract(
+      this.#proxyFactoryAddress,
+      GnosisSafeProxyFactory.abi,
+      this.#signer
+    )
     if (callbackAddress && nonce) {
       return await proxyFactory.createProxyWithCallback(
-        safeSingletonAddress,
+        this.#safeSingletonAddress,
         data,
         nonce,
         callbackAddress
       )
     } else if (nonce) {
-      return await proxyFactory.createProxyWithNonce(safeSingletonAddress, data, nonce)
+      return await proxyFactory.createProxyWithNonce(this.#safeSingletonAddress, data, nonce)
     } else {
-      return await proxyFactory.createProxy(safeSingletonAddress, data)
+      return await proxyFactory.createProxy(this.#safeSingletonAddress, data)
     }
   }
 }
