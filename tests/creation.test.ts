@@ -40,19 +40,15 @@ describe('Safe creation', () => {
     it('should fail if the signer is not connected to a provider', async () => {
       // Used to mock a signer without provider
       const mockedSigner = {}
-      const ethersSafeFactory = new EthersSafeFactory(
-        mockedSigner as Signer,
-        proxyFactoryAddress,
-        safeSingletonAddress
-      )
       await chai
         .expect(
-          ethersSafeFactory.createSafe({
-            owners,
-            threshold: -1
-          })
+          () => new EthersSafeFactory(
+            mockedSigner as Signer,
+            proxyFactoryAddress,
+            safeSingletonAddress
+          )
         )
-        .rejectedWith('Signer must be connected to a provider')
+        .throws('Signer must be connected to a provider')
     })
 
     it('should fail if the proxyFactoryAddress is not valid', async () => {

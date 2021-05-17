@@ -3,6 +3,7 @@ import GnosisSafeProxyFactory from '@gnosis.pm/safe-contracts/build/contracts/Gn
 import GnosisSafe from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafe.json'
 import Safe from 'Safe'
 import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
+import { validateIsDeployedFactory } from './utils/contracts'
 import EthersSafe from './EthersSafe'
 
 export interface DeploymentOptions {
@@ -26,31 +27,26 @@ class EthersSafeFactory {
   #signer!: Signer
   #proxyFactoryAddress!: string
   #safeSingletonAddress!: string
+  validateIsDeployed: (address: string, name: string) => Promise<void>
 
   constructor(signer: Signer, proxyFactoryAddress: string, safeSingletonAddress: string) {
     this.#signer = signer
     this.#proxyFactoryAddress = proxyFactoryAddress
     this.#safeSingletonAddress = safeSingletonAddress
+
+    if (!this.#signer.provider) {
+      throw new Error('Signer must be connected to a provider')
+    }
+
+    this.validateIsDeployed = validateIsDeployedFactory(this.#signer.provider!)
   }
 
   async createSafe(
     safeAccountConfiguration: SafeAccountConfiguration,
     deploymentOptions?: DeploymentOptions
   ): Promise<Safe> {
-    if (!this.#signer.provider) {
-      throw new Error('Signer must be connected to a provider')
-    }
-    const proxyFactoryContractCode = await this.#signer.provider.getCode(this.#proxyFactoryAddress)
-    if (proxyFactoryContractCode === EMPTY_DATA) {
-      throw new Error('ProxyFactory contract is not deployed in the current network')
-    }
-
-    const safeSingletonContractCode = await this.#signer.provider.getCode(
-      this.#safeSingletonAddress
-    )
-    if (safeSingletonContractCode === EMPTY_DATA) {
-      throw new Error('SafeSingleton contract is not deployed in the current network')
-    }
+    await this.validateIsDeployed(this.#proxyFactoryAddress, 'ProxyFactory')
+    await this.validateIsDeployed(this.#safeSingletonAddress, 'SafeSingleton')
 
     const { owners } = safeAccountConfiguration
     const {
