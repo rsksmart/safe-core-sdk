@@ -79,31 +79,31 @@ class EthersSafeFactory {
     return await EthersSafe.create(ethers, gnosisSafe.address, this.#signer)
   }
 
-  private async deployProxy(deploymentOptions: DeploymentOptions = {}) {
-    const { data = EMPTY_DATA, nonce, callbackAddress } = deploymentOptions
-
+  private async createDeployProxyTransaction(deploymentOptions: DeploymentOptions = {}) {
     const proxyFactory = new Contract(
       this.#proxyFactoryAddress,
       GnosisSafeProxyFactory.abi,
       this.#signer
     )
 
-    let createProxyTx: ContractTransaction
+    const { data = EMPTY_DATA, nonce, callbackAddress } = deploymentOptions
 
     if (callbackAddress && nonce) {
-      createProxyTx = await proxyFactory.createProxyWithCallback(
+      return await proxyFactory.createProxyWithCallback(
         this.#safeSingletonAddress,
         data,
         nonce,
         callbackAddress
       )
     } else if (nonce) {
-      createProxyTx = await proxyFactory.createProxyWithNonce(this.#safeSingletonAddress, data, nonce)
+      return await proxyFactory.createProxyWithNonce(this.#safeSingletonAddress, data, nonce)
     } else {
-      createProxyTx = await proxyFactory.createProxy(this.#safeSingletonAddress, data)
+      return await proxyFactory.createProxy(this.#safeSingletonAddress, data)
     }
+  }
 
-    const receipt = await createProxyTx.wait()
+  private async deployProxy(deploymentOptions: DeploymentOptions = {}) {
+    const receipt = await this.createDeployProxyTransaction(deploymentOptions).then(tx => tx.wait())
     const proxyAddress = receipt.events?.find((e: Event) => e.event === 'ProxyCreation')!.args![0]
     return new Contract(proxyAddress, GnosisSafe.abi, this.#signer)
   }
