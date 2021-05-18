@@ -47,6 +47,23 @@ Create an instance of the Safe Core SDK with `signer1` connected as the signer.
 const safeSdk = await EthersSafe.create(ethers, safeAddress, signer1)
 ```
 
+You can also deploy a Safe using the Factory module:
+
+```js
+import { EthersSafeFactory } from '@gnosis.pm/safe-core-sdk'
+
+const ethersSafeFactory = new EthersSafeFactory(
+  signer,
+  proxyFactoryAddress,
+  safeSingletonAddress
+)
+
+const safeSdk = await ethersSafeFactory.createSafe({
+  owners: ['0x1234...', '0xabcd...', '0x0987...'],
+  threshold: 2
+})
+```
+
 ### 1. Create a Safe transaction
 
 ```js
