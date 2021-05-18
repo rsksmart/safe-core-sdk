@@ -34,8 +34,7 @@ class EthersSafeFactory {
     this.#proxyFactoryAddress = proxyFactoryAddress
     this.#safeSingletonAddress = safeSingletonAddress
 
-    if (!this.#signer.provider)
-      throw new Error('Signer must be connected to a provider')
+    if (!this.#signer.provider) throw new Error('Signer must be connected to a provider')
 
     this.validateIsDeployed = validateIsDeployedFactory(this.#signer.provider!)
   }

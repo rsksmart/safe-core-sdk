@@ -1,5 +1,6 @@
 import { AddressZero } from '@ethersproject/constants'
-import { deployments, ethers } from 'hardhat'
+import { BigNumber, BigNumberish } from 'ethers'
+import { deployments, ethers, waffle } from 'hardhat'
 
 export const getSafeSingleton = async () => {
   const SafeDeployment = await deployments.get('GnosisSafe')
@@ -47,4 +48,15 @@ export const getSocialRecoveryModule = async () => {
   const SocialRecoveryModuleDeployment = await deployments.get('SocialRecoveryModule')
   const SocialRecoveryModule = await ethers.getContractFactory('SocialRecoveryModule')
   return SocialRecoveryModule.attach(SocialRecoveryModuleDeployment.address)
+}
+
+export const balanceVerifierFactory = (
+  getBalance: (address: string) => Promise<BigNumber>
+) => async (address: string) => {
+  const balanceBefore = await getBalance(address)
+  return async (expected: BigNumberish): Promise<boolean> => {
+    const balanceAfter = await getBalance(address)
+    const diff = balanceAfter.sub(balanceBefore)
+    return diff.eq(expected)
+  }
 }
