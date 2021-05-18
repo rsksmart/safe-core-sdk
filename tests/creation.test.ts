@@ -39,11 +39,8 @@ describe('Safe creation', () => {
       const mockedSigner = {}
       await chai
         .expect(
-          () => new EthersSafeFactory(
-            mockedSigner as Signer,
-            proxyFactoryAddress,
-            safeSingletonAddress
-          )
+          () =>
+            new EthersSafeFactory(mockedSigner as Signer, proxyFactoryAddress, safeSingletonAddress)
         )
         .throws('Signer must be connected to a provider')
     })
@@ -148,7 +145,10 @@ describe('Safe creation', () => {
         proxyFactoryAddress,
         safeSingletonAddress
       )
-      const safeSdk = await ethersSafeFactory.createSafe({ owners, threshold: 1 }, { nonce: 123456 })
+      const safeSdk = await ethersSafeFactory.createSafe(
+        { owners, threshold: 1 },
+        { nonce: 123456 }
+      )
       await verifyOwnersAndThreshold(safeSdk, owners, 1)
     })
 

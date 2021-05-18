@@ -33,7 +33,7 @@ const deploy: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
     log: true,
     deterministicDeployment: true
   })
-      
+
   await deploy('MockProxyCreationCallback', {
     from: deployer,
     args: [],
