@@ -1,8 +1,9 @@
-import { Contract, Signer, Event, ethers } from 'ethers'
+import { Contract, Signer, Event, ethers, ContractTransaction } from 'ethers'
 import GnosisSafeProxyFactory from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafeProxyFactory.json'
 import GnosisSafe from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafe.json'
 import Safe from 'Safe'
 import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
+import { validateIsDeployedFactory } from './utils/contracts'
 import EthersSafe from './EthersSafe'
 
 export interface DeploymentOptions {
@@ -13,7 +14,7 @@ export interface DeploymentOptions {
 
 interface SafeAccountConfiguration {
   owners: string[]
-  threshold?: number
+  threshold: number
   to?: string
   data?: string
   fallbackHandler?: string
@@ -26,35 +27,36 @@ class EthersSafeFactory {
   #signer!: Signer
   #proxyFactoryAddress!: string
   #safeSingletonAddress!: string
+  validateIsDeployed: (address: string, name: string) => Promise<void>
 
   constructor(signer: Signer, proxyFactoryAddress: string, safeSingletonAddress: string) {
     this.#signer = signer
     this.#proxyFactoryAddress = proxyFactoryAddress
     this.#safeSingletonAddress = safeSingletonAddress
+
+    if (!this.#signer.provider)
+      throw new Error('Signer must be connected to a provider')
+
+    this.validateIsDeployed = validateIsDeployedFactory(this.#signer.provider!)
   }
 
   async createSafe(
     safeAccountConfiguration: SafeAccountConfiguration,
     deploymentOptions?: DeploymentOptions
   ): Promise<Safe> {
-    if (!this.#signer.provider) {
-      throw new Error('Signer must be connected to a provider')
-    }
-    const proxyFactoryContractCode = await this.#signer.provider.getCode(this.#proxyFactoryAddress)
-    if (proxyFactoryContractCode === EMPTY_DATA) {
-      throw new Error('ProxyFactory contract is not deployed in the current network')
-    }
+    await this.validateIsDeployed(this.#proxyFactoryAddress, 'ProxyFactory')
+    await this.validateIsDeployed(this.#safeSingletonAddress, 'SafeSingleton')
 
-    const safeSingletonContractCode = await this.#signer.provider.getCode(
-      this.#safeSingletonAddress
-    )
-    if (safeSingletonContractCode === EMPTY_DATA) {
-      throw new Error('SafeSingleton contract is not deployed in the current network')
-    }
+    if (safeAccountConfiguration.owners.length <= 0)
+      throw new Error('Invalid owners: it must have at least one')
+    if (safeAccountConfiguration.threshold <= 0)
+      throw new Error('Invalid threshold: it must be greater than or equal to 0')
+    if (safeAccountConfiguration.threshold > safeAccountConfiguration.owners.length)
+      throw new Error('Invalid threshold: it must be lower than or equal to owners length')
 
-    const { owners } = safeAccountConfiguration
     const {
-      threshold = owners.length,
+      owners,
+      threshold,
       to = ZERO_ADDRESS,
       data = EMPTY_DATA,
       fallbackHandler = ZERO_ADDRESS,
@@ -62,39 +64,25 @@ class EthersSafeFactory {
       payment = 0,
       paymentReceiver = ZERO_ADDRESS
     } = safeAccountConfiguration
-    if (threshold <= 0) {
-      throw new Error('Invalid threshold: it must be greater than or equal to 0')
-    }
-    if (threshold > owners.length) {
-      throw new Error('Invalid threshold: it must be lower than or equal to owners length')
-    }
 
-    let createProxyTx = await this.createProxyTransaction(deploymentOptions)
+    const gnosisSafe = await this.deployProxy(deploymentOptions)
 
-    const receipt = await createProxyTx.wait()
-    const proxyAddress = receipt.events.find((e: Event) => e.event === 'ProxyCreation').args[0]
+    await gnosisSafe
+      .setup(owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver)
+      .then((tx: ContractTransaction) => tx.wait())
 
-    const gnosisSafe = new Contract(proxyAddress, GnosisSafe.abi, this.#signer)
-    await gnosisSafe.setup(
-      owners,
-      threshold,
-      to,
-      data,
-      fallbackHandler,
-      paymentToken,
-      payment,
-      paymentReceiver
-    )
     return await EthersSafe.create(ethers, gnosisSafe.address, this.#signer)
   }
 
-  private async createProxyTransaction(deploymentOptions: DeploymentOptions = {}) {
-    const { data = EMPTY_DATA, nonce, callbackAddress } = deploymentOptions
+  private async createDeployProxyTransaction(deploymentOptions: DeploymentOptions = {}) {
     const proxyFactory = new Contract(
       this.#proxyFactoryAddress,
       GnosisSafeProxyFactory.abi,
       this.#signer
     )
+
+    const { data = EMPTY_DATA, nonce, callbackAddress } = deploymentOptions
+
     if (callbackAddress && nonce) {
       return await proxyFactory.createProxyWithCallback(
         this.#safeSingletonAddress,
@@ -107,6 +95,14 @@ class EthersSafeFactory {
     } else {
       return await proxyFactory.createProxy(this.#safeSingletonAddress, data)
     }
+  }
+
+  private async deployProxy(deploymentOptions: DeploymentOptions = {}) {
+    const receipt = await this.createDeployProxyTransaction(deploymentOptions).then((tx) =>
+      tx.wait()
+    )
+    const proxyAddress = receipt.events?.find((e: Event) => e.event === 'ProxyCreation')!.args![0]
+    return new Contract(proxyAddress, GnosisSafe.abi, this.#signer)
   }
 }
 
