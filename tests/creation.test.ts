@@ -18,10 +18,7 @@ describe('Safe creation', () => {
     }
   })
 
-  const verifyOwnersAndThreshold = async (safeSdk: any, owners: string[], threshold?: number) => {
-    if (!threshold) {
-      threshold = owners.length
-    }
+  const verifyOwnersAndThreshold = async (safeSdk: any, owners: string[], threshold: number) => {
     const retrievedOwners: string[] = await safeSdk.getOwners()
     const retrievedThreshold: number = await safeSdk.getThreshold()
     chai.expect(retrievedOwners).to.deep.equal(owners)
@@ -152,7 +149,7 @@ describe('Safe creation', () => {
         safeSingletonAddress
       )
       const safeSdk = await ethersSafeFactory.createSafe({ owners, threshold: 1 }, { nonce: 123456 })
-      await verifyOwnersAndThreshold(safeSdk, owners)
+      await verifyOwnersAndThreshold(safeSdk, owners, 1)
     })
 
     it('should successfully create a safeSDK instance with callback and nonce', async () => {
@@ -169,7 +166,7 @@ describe('Safe creation', () => {
           callbackAddress: proxyCreationCallback.address
         }
       )
-      await verifyOwnersAndThreshold(safeSdk, owners)
+      await verifyOwnersAndThreshold(safeSdk, owners, 1)
     })
   })
 })
