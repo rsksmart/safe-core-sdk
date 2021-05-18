@@ -14,7 +14,7 @@ export interface DeploymentOptions {
 
 interface SafeAccountConfiguration {
   owners: string[]
-  threshold?: number
+  threshold: number
   to?: string
   data?: string
   fallbackHandler?: string
@@ -48,9 +48,13 @@ class EthersSafeFactory {
     await this.validateIsDeployed(this.#proxyFactoryAddress, 'ProxyFactory')
     await this.validateIsDeployed(this.#safeSingletonAddress, 'SafeSingleton')
 
-    const { owners } = safeAccountConfiguration
+    if (safeAccountConfiguration.owners.length <= 0) throw new Error('Invalid owners: it must have at least one')
+    if (safeAccountConfiguration.threshold <= 0) throw new Error('Invalid threshold: it must be greater than or equal to 0')
+    if (safeAccountConfiguration.threshold > safeAccountConfiguration.owners.length) throw new Error('Invalid threshold: it must be lower than or equal to owners length')
+
     const {
-      threshold = owners.length,
+      owners,
+      threshold,
       to = ZERO_ADDRESS,
       data = EMPTY_DATA,
       fallbackHandler = ZERO_ADDRESS,
@@ -58,12 +62,6 @@ class EthersSafeFactory {
       payment = 0,
       paymentReceiver = ZERO_ADDRESS
     } = safeAccountConfiguration
-    if (threshold <= 0) {
-      throw new Error('Invalid threshold: it must be greater than or equal to 0')
-    }
-    if (threshold > owners.length) {
-      throw new Error('Invalid threshold: it must be lower than or equal to owners length')
-    }
 
     let createProxyTx = await this.createProxyTransaction(deploymentOptions)
 
