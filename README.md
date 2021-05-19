@@ -404,6 +404,58 @@ const txResponse = await safeSdk.executeTransaction(tx)
 await txResponse.wait()
 ```
 
+## ERC20 Transactions
+
+The `ERC20TransactionBuilder` allows to easily create [ERC20](https://eips.ethereum.org/EIPS/eip-20) transactions.
+
+### ERC20TransactionBuilder creation
+
+```js
+const safeSdk = await EthersSafe.create(...)
+// or using the factory module
+/*
+const safeSdk = await ethersSafeFactory.createSafe(...)
+*/
+const erc20TransactionBuilder = new ERC20TransactionBuilder(safeSdk, ERC20Token)
+```
+
+### transfer
+
+Returns a Safe transaction ready to be signed that will execute a ERC20 transfer transaction.
+```js
+const safeTransaction = await erc20TransactionBuilder.transfer(
+  toAddress,
+  BigNumber.from(123456)
+)
+
+const txResponse = await safeSdk.executeTransaction(safeTransaction)
+await txResponse.wait()
+```
+
+### transferFrom
+
+Returns a Safe transaction ready to be signed that will execute a ERC20 transferFrom transaction.
+```js
+const safeTransaction = await erc20TransactionBuilder.transferFrom(
+  fromAddress,
+  toAddress,
+  BigNumber.from(123456)
+)
+
+const txResponse = await safeSdk.executeTransaction(safeTransaction)
+await txResponse.wait()
+```
+
+### approve
+
+Returns a Safe transaction ready to be signed that will execute a ERC20 transferFrom transaction.
+```js
+const safeTransaction = await erc20TransactionBuilder.approve(spenderAddress, BigNumber.from(allowance))
+
+const txResponse = await safeSdk.executeTransaction(safeTransaction)
+await txResponse.wait()
+```
+
 ## License
 
 This library is released under MIT.
