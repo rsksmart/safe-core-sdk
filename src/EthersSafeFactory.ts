@@ -1,7 +1,7 @@
 import { Contract, Signer, Event, ethers, ContractTransaction } from 'ethers'
 import GnosisSafeProxyFactory from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafeProxyFactory.json'
 import GnosisSafe from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafe.json'
-import Safe from 'Safe'
+import Safe from './Safe'
 import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
 import { validateIsDeployedFactory } from './utils/contracts'
 import EthersSafe from './EthersSafe'

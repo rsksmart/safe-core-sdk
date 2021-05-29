@@ -1,5 +1,5 @@
 import EthersSafeFactory from './EthersSafeFactory'
-import { SafeSignature } from 'utils/signatures/SafeSignature'
+import { SafeSignature } from './utils/signatures/SafeSignature'
 import EthersSafe from './EthersSafe'
 import Safe from './Safe'
 import SafeTransaction, { SafeTransactionDataPartial } from './utils/transactions/SafeTransaction'
