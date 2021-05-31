@@ -1,10 +1,11 @@
-import { Contract, Signer, Event, ethers, ContractTransaction } from 'ethers'
+import { Contract, Signer, Event, ethers } from 'ethers'
 import GnosisSafeProxyFactory from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafeProxyFactory.json'
 import GnosisSafe from '@gnosis.pm/safe-contracts/build/contracts/GnosisSafe.json'
 import Safe from './Safe'
 import { EMPTY_DATA, ZERO_ADDRESS } from './utils/constants'
 import { validateIsDeployedFactory } from './utils/contracts'
 import EthersSafe from './EthersSafe'
+import { Interface } from '@ethersproject/abi'
 
 export interface DeploymentOptions {
   nonce?: number
@@ -65,23 +66,34 @@ class EthersSafeFactory {
       paymentReceiver = ZERO_ADDRESS
     } = safeAccountConfiguration
 
-    const gnosisSafe = await this.deployProxy(deploymentOptions)
+    const gnosisSafeInterface = new Interface(GnosisSafe.abi)
+    const setupFunctionData = gnosisSafeInterface.encodeFunctionData('setup', [
+      owners,
+      threshold,
+      to,
+      data,
+      fallbackHandler,
+      paymentToken,
+      payment,
+      paymentReceiver
+    ])
 
-    await gnosisSafe
-      .setup(owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver)
-      .then((tx: ContractTransaction) => tx.wait())
-
+    const gnosisSafe = await this.deployProxy(deploymentOptions, setupFunctionData)
     return await EthersSafe.create(ethers, gnosisSafe.address, this.#signer)
   }
 
-  private async createDeployProxyTransaction(deploymentOptions: DeploymentOptions = {}) {
+  private async createDeployProxyTransaction(
+    deploymentOptions: DeploymentOptions = {},
+    setupFnData: string
+  ) {
     const proxyFactory = new Contract(
       this.#proxyFactoryAddress,
       GnosisSafeProxyFactory.abi,
       this.#signer
     )
 
-    const { data = EMPTY_DATA, nonce, callbackAddress } = deploymentOptions
+    const { nonce, callbackAddress } = deploymentOptions
+    const data = setupFnData || deploymentOptions.data || EMPTY_DATA
 
     if (callbackAddress && nonce) {
       return await proxyFactory.createProxyWithCallback(
@@ -97,11 +109,17 @@ class EthersSafeFactory {
     }
   }
 
-  private async deployProxy(deploymentOptions: DeploymentOptions = {}) {
-    const receipt = await this.createDeployProxyTransaction(deploymentOptions).then((tx) =>
-      tx.wait()
+  private async deployProxy(deploymentOptions: DeploymentOptions = {}, setupFnData: string) {
+    const receipt = await this.createDeployProxyTransaction(deploymentOptions, setupFnData).then(
+      (tx) => tx.wait()
     )
-    const proxyAddress = receipt.events?.find((e: Event) => e.event === 'ProxyCreation')!.args![0]
+    const proxyCreationEvent = receipt.events?.find((e: Event) => e.event === 'ProxyCreation')
+    if (!proxyCreationEvent || !proxyCreationEvent.args) {
+      throw new Error(
+        'Proxy creation failed: check if the proxy has been deployed correctly and try again'
+      )
+    }
+    const proxyAddress = proxyCreationEvent.args[0]
     return new Contract(proxyAddress, GnosisSafe.abi, this.#signer)
   }
 }
