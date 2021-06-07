@@ -9,7 +9,6 @@ import { Interface } from '@ethersproject/abi'
 
 export interface DeploymentOptions {
   nonce?: number
-  data?: string
   callbackAddress?: string
 }
 
@@ -84,7 +83,7 @@ class EthersSafeFactory {
 
   private async createDeployProxyTransaction(
     deploymentOptions: DeploymentOptions = {},
-    setupFnData: string
+    data: string
   ) {
     const proxyFactory = new Contract(
       this.#proxyFactoryAddress,
@@ -93,7 +92,6 @@ class EthersSafeFactory {
     )
 
     const { nonce, callbackAddress } = deploymentOptions
-    const data = setupFnData || deploymentOptions.data || EMPTY_DATA
 
     if (callbackAddress && nonce) {
       return await proxyFactory.createProxyWithCallback(
